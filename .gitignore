@@ -1,0 +1,55 @@
+# See https://help.github.com/articles/ignoring-files/ for more information.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+/logs
+.air
+.air.*
+support-agent
+support-agent.exe
+*.exe
+
+# testing
+/coverage
+
+# production build
+/dist
+/build
+/tmp
+
+# misc
+.DS_Store
+*.pem
+*.log
+*.test
+*.out
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env
+.env.*
+!.env.example
+config.json
+
+# typescript
+*.tsbuildinfo
+
+# other (preferensi project)
+/backup*
+*/references
+*/performances
+*/database
+scripts
+*/scripts
+AGENTS.md
+CLAUDE.md
+DROID.md
+readmeai*.md
+readmeai*.txt
+*/postman

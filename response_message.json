@@ -1,0 +1,47 @@
+{
+  "CODE_0": {
+    "code": 0,
+    "id": "Sukses",
+    "en": "Success"
+  },
+  "CODE_400": {
+    "code": 400,
+    "id": "Permintaan tidak valid",
+    "en": "Bad request"
+  },
+  "CODE_401": {
+    "code": 401,
+    "id": "API key tidak valid",
+    "en": "Unauthorized"
+  },
+  "CODE_404": {
+    "code": 404,
+    "id": "Data tidak ditemukan",
+    "en": "Not found"
+  },
+  "CODE_413": {
+    "code": 413,
+    "id": "Ukuran file terlalu besar",
+    "en": "Payload too large"
+  },
+  "CODE_415": {
+    "code": 415,
+    "id": "Tipe file tidak didukung",
+    "en": "Unsupported media type"
+  },
+  "CODE_422": {
+    "code": 422,
+    "id": "Gagal memproses dokumen",
+    "en": "Failed to process document"
+  },
+  "CODE_500": {
+    "code": 500,
+    "id": "Terjadi kesalahan pada server",
+    "en": "Internal server error"
+  },
+  "CODE_502": {
+    "code": 502,
+    "id": "Gagal komunikasi dengan Vertex AI",
+    "en": "Vertex AI request failed"
+  }
+}

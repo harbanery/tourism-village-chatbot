@@ -1,0 +1,52 @@
+{
+  "app": {
+    "name": "support-agent-golang",
+    "env": "development"
+  },
+  "web": {
+    "prefork": false,
+    "port": 8080,
+    "body_limit_mb": 50
+  },
+  "log": {
+    "level": 4
+  },
+  "database": {
+    "username": "postgres",
+    "password": "postgres",
+    "host": "localhost",
+    "port": 5432,
+    "name": "support_agent",
+    "pool": {
+      "idle": 10,
+      "max": 100,
+      "lifetime": 300
+    }
+  },
+  "api": {
+    "key": ""
+  },
+  "vertex": {
+    "project_id": "your-gcp-project-id",
+    "region": "asia-southeast2",
+    "credentials_file": "",
+    "embedding_model": "gemini-embedding-001",
+    "embedding_dimension": 768,
+    "embedding_batch_size": 5,
+    "chat_model": "gemini-2.5-flash",
+    "timeout_seconds": 120
+  },
+  "knowledge": {
+    "chunk_size": 1200,
+    "chunk_overlap": 150,
+    "max_file_size_mb": 20
+  },
+  "chat": {
+    "top_k": 5,
+    "min_score": 0.3,
+    "max_history": 10,
+    "max_output_tokens": 1024,
+    "temperature": 0.2,
+    "system_prompt": ""
+  }
+}
