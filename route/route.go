@@ -3,8 +3,8 @@ package route
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"support-agent-golang/app/chat"
-	"support-agent-golang/app/knowledge"
+	"tourism-village-chatbot/app/chat"
+	"tourism-village-chatbot/app/knowledge"
 )
 
 type RouteConfig struct {

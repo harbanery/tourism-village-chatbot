@@ -7,12 +7,12 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 
-	"support-agent-golang/app/chat"
-	"support-agent-golang/app/knowledge"
-	"support-agent-golang/entity"
-	"support-agent-golang/helper"
-	"support-agent-golang/middleware"
-	"support-agent-golang/route"
+	"tourism-village-chatbot/app/chat"
+	"tourism-village-chatbot/app/knowledge"
+	"tourism-village-chatbot/entity"
+	"tourism-village-chatbot/helper"
+	"tourism-village-chatbot/middleware"
+	"tourism-village-chatbot/route"
 )
 
 type BootstrapConfig struct {

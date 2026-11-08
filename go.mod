@@ -1,4 +1,4 @@
-module support-agent-golang
+module tourism-village-chatbot
 
 go 1.26.0
 

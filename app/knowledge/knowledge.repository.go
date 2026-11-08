@@ -1,7 +1,7 @@
 package knowledge
 
 import (
-	"support-agent-golang/entity"
+	"tourism-village-chatbot/entity"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"

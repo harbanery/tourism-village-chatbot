@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"support-agent-golang/config"
+	"tourism-village-chatbot/config"
 )
 
 func main() {

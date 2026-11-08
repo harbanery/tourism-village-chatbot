@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"support-agent-golang/entity"
-	"support-agent-golang/helper"
+	"tourism-village-chatbot/entity"
+	"tourism-village-chatbot/helper"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"

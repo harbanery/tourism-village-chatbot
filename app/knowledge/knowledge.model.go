@@ -3,7 +3,7 @@ package knowledge
 import (
 	"time"
 
-	"support-agent-golang/entity"
+	"tourism-village-chatbot/entity"
 )
 
 type IngestTextRequest struct {

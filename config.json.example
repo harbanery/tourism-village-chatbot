@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "support-agent-golang",
+    "name": "tourism-village-chatbot",
     "env": "development"
   },
   "web": {

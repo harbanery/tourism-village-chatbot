@@ -3,7 +3,7 @@ package chat
 import (
 	"time"
 
-	"support-agent-golang/entity"
+	"tourism-village-chatbot/entity"
 )
 
 type CreateSessionRequest struct {

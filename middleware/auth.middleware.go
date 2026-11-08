@@ -5,7 +5,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"support-agent-golang/helper"
+	"tourism-village-chatbot/helper"
 )
 
 // NewAPIKeyMiddleware protects the API with a shared secret passed in
