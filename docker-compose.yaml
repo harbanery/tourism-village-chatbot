@@ -1,20 +1,20 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: support-agent-postgres
+    container_name: tourism-village-chatbot-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: support_agent
+      POSTGRES_DB: tourism_village_chatbot
     ports:
       - "5432:5432"
     volumes:
-      - support-agent-pgdata:/var/lib/postgresql/data
+      - tourism-village-chatbot-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d support_agent"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tourism_village_chatbot"]
       interval: 5s
       timeout: 5s
       retries: 10
 
 volumes:
-  support-agent-pgdata:
+  tourism-village-chatbot-pgdata:

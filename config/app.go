@@ -32,7 +32,7 @@ func Bootstrap(config *BootstrapConfig) {
 	config.App.Get("/version/development", func(c *fiber.Ctx) error {
 		res := Version{
 			VersionNumber: "1.0.0",
-			Service:       "support agent service",
+			Service:       "tourism village chatbot service",
 		}
 
 		return c.JSON(res)

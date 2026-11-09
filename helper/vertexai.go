@@ -17,33 +17,42 @@ import (
 )
 
 const (
-	vertexScope                = "https://www.googleapis.com/auth/cloud-platform"
-	defaultEmbeddingModel      = "gemini-embedding-001"
-	defaultChatModel           = "gemini-2.5-flash"
-	defaultRegion              = "asia-southeast2"
-	defaultEmbeddingDimension  = 768
-	defaultEmbeddingBatchSize  = 5
-	defaultImageDescribePrompt = "Deskripsikan gambar ini secara detail dan faktual dalam bahasa Indonesia. Sertakan objek, tempat, aktivitas, dan suasana yang terlihat. Deskripsikan dalam bentuk paragraf ringkas."
+	vertexScope                 = "https://www.googleapis.com/auth/cloud-platform"
+	defaultEmbeddingModel       = "gemini-embedding-001"
+	defaultChatModel            = "gemini-2.5-flash"
+	defaultRegion               = "asia-southeast2"
+	defaultEmbeddingDimension   = 768
+	defaultEmbeddingBatchSize   = 5
+	defaultEmbeddingInstanceKey = "content"
+	defaultImageDescribePrompt  = "Deskripsikan gambar ini secara detail dan faktual dalam bahasa Indonesia. Sertakan objek, tempat, aktivitas, dan suasana yang terlihat. Deskripsikan dalam bentuk paragraf ringkas."
 )
 
 // VertexAIClient is a lightweight REST client for Google Vertex AI
 // (embeddings via :predict and generation via :generateContent).
 // Authentication uses Application Default Credentials, or a service
 // account JSON file when vertex.credentials_file is configured.
+//
+// Embeddings can be produced in two ways:
+//   - a Google publisher model (default: gemini-embedding-001), or
+//   - an open-weights model deployed to a Vertex AI endpoint, such as
+//     EmbeddingGemma 2 from Model Garden (set vertex.embedding_endpoint).
 type VertexAIClient struct {
 	log        *logrus.Logger
 	httpClient *http.Client
 
-	projectID         string
-	region            string
-	embeddingModel    string
-	chatModel         string
-	embeddingDim      int
-	embeddingBatch    int
-	imageDescPrompt   string
-	credentials       *google.Credentials
-	initErr           error
-	requestTimeoutSec int
+	projectID             string
+	region                string
+	embeddingModel        string
+	embeddingEndpoint     string
+	embeddingInstanceKey  string
+	embeddingSendTaskType bool
+	chatModel             string
+	embeddingDim          int
+	embeddingBatch        int
+	imageDescPrompt       string
+	credentials           *google.Credentials
+	initErr               error
+	requestTimeoutSec     int
 }
 
 func NewVertexAIClient(config *viper.Viper, log *logrus.Logger) *VertexAIClient {
@@ -63,16 +72,18 @@ func NewVertexAIClient(config *viper.Viper, log *logrus.Logger) *VertexAIClient 
 	}
 
 	client := &VertexAIClient{
-		log:               log,
-		httpClient:        &http.Client{Timeout: time.Duration(timeoutSec) * time.Second},
-		projectID:         config.GetString("vertex.project_id"),
-		region:            config.GetString("vertex.region"),
-		embeddingModel:    config.GetString("vertex.embedding_model"),
-		chatModel:         config.GetString("vertex.chat_model"),
-		embeddingDim:      embeddingDim,
-		embeddingBatch:    embeddingBatch,
-		imageDescPrompt:   config.GetString("vertex.image_prompt"),
-		requestTimeoutSec: timeoutSec,
+		log:                  log,
+		httpClient:           &http.Client{Timeout: time.Duration(timeoutSec) * time.Second},
+		projectID:            config.GetString("vertex.project_id"),
+		region:               config.GetString("vertex.region"),
+		embeddingModel:       config.GetString("vertex.embedding_model"),
+		embeddingEndpoint:    config.GetString("vertex.embedding_endpoint"),
+		embeddingInstanceKey: config.GetString("vertex.embedding_instance_key"),
+		chatModel:            config.GetString("vertex.chat_model"),
+		embeddingDim:         embeddingDim,
+		embeddingBatch:       embeddingBatch,
+		imageDescPrompt:      config.GetString("vertex.image_prompt"),
+		requestTimeoutSec:    timeoutSec,
 	}
 
 	if client.region == "" {
@@ -81,11 +92,23 @@ func NewVertexAIClient(config *viper.Viper, log *logrus.Logger) *VertexAIClient 
 	if client.embeddingModel == "" {
 		client.embeddingModel = defaultEmbeddingModel
 	}
+	if client.embeddingInstanceKey == "" {
+		client.embeddingInstanceKey = defaultEmbeddingInstanceKey
+	}
 	if client.chatModel == "" {
 		client.chatModel = defaultChatModel
 	}
 	if client.imageDescPrompt == "" {
 		client.imageDescPrompt = defaultImageDescribePrompt
+	}
+
+	// Publisher models accept a task_type hint to steer retrieval quality.
+	// Deployed open-weights containers usually do not, so default to sending
+	// it only for publisher models unless the config overrides it explicitly.
+	if config.IsSet("vertex.embedding_send_task_type") {
+		client.embeddingSendTaskType = config.GetBool("vertex.embedding_send_task_type")
+	} else {
+		client.embeddingSendTaskType = client.embeddingEndpoint == ""
 	}
 
 	ctx := context.Background()
@@ -114,7 +137,15 @@ func NewVertexAIClient(config *viper.Viper, log *logrus.Logger) *VertexAIClient 
 	return client
 }
 
-func (c *VertexAIClient) EmbeddingModel() string  { return c.embeddingModel }
+// EmbeddingModel returns a human-readable identifier of the embedding target
+// (deployed endpoint when configured, otherwise the publisher model name).
+func (c *VertexAIClient) EmbeddingModel() string {
+	if c.embeddingEndpoint != "" {
+		return c.embeddingEndpoint
+	}
+	return c.embeddingModel
+}
+
 func (c *VertexAIClient) ChatModel() string       { return c.chatModel }
 func (c *VertexAIClient) EmbeddingDimension() int { return c.embeddingDim }
 
@@ -170,33 +201,79 @@ func (c *VertexAIClient) doRequest(ctx context.Context, method, url string, payl
 
 // --- Embeddings -----------------------------------------------------------------
 
-type embeddingInstance struct {
-	Content  string `json:"content"`
-	TaskType string `json:"task_type,omitempty"`
-}
-
+// embeddingParameters mirrors the Vertex AI predict parameters block.
+// Publisher models (gemini-embedding-001) accept outputDimensionality;
+// deployed open-weights models such as EmbeddingGemma 2 ignore unknown keys.
 type embeddingParameters struct {
 	OutputDimensionality int `json:"outputDimensionality,omitempty"`
 }
 
+// embeddingPredictRequest is the shared :predict envelope. Instances are kept
+// as generic maps so the instance key can follow the target model
+// (vertex.embedding_instance_key, default "content"). Parameters is a pointer
+// so it can be omitted entirely for deployed endpoints that do not accept it.
 type embeddingPredictRequest struct {
-	Instances  []embeddingInstance `json:"instances"`
-	Parameters embeddingParameters `json:"parameters,omitempty"`
-}
-
-type embeddingPrediction struct {
-	Embeddings struct {
-		Values []float64 `json:"values"`
-	} `json:"embeddings"`
+	Instances  []map[string]any     `json:"instances"`
+	Parameters *embeddingParameters `json:"parameters,omitempty"`
 }
 
 type embeddingPredictResponse struct {
-	Predictions []embeddingPrediction `json:"predictions"`
+	Predictions []json.RawMessage `json:"predictions"`
 }
 
-// EmbedTexts converts texts into embedding vectors using the configured
-// embedding model (default gemini-embedding-001; set vertex.embedding_model
-// to use another model such as EmbeddingGemma). Requests are batched to
+// parseEmbeddingValues extracts the vector from a single prediction. Vertex AI
+// returns different shapes depending on the model:
+//   - {"embeddings": {"values": [...]}}  (publisher models)
+//   - {"embeddings": [...]}              (some Model Garden containers)
+//   - {"embedding": [...]}
+func parseEmbeddingValues(raw json.RawMessage) ([]float64, error) {
+	var prediction map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &prediction); err != nil {
+		return nil, fmt.Errorf("prediction tidak valid: %w", err)
+	}
+
+	for _, key := range []string{"embeddings", "embedding"} {
+		value, ok := prediction[key]
+		if !ok {
+			continue
+		}
+
+		var nested struct {
+			Values []float64 `json:"values"`
+		}
+		if err := json.Unmarshal(value, &nested); err == nil && len(nested.Values) > 0 {
+			return nested.Values, nil
+		}
+
+		var flat []float64
+		if err := json.Unmarshal(value, &flat); err == nil && len(flat) > 0 {
+			return flat, nil
+		}
+	}
+
+	return nil, fmt.Errorf("nilai embedding tidak ditemukan pada response")
+}
+
+// embeddingURL builds the :predict endpoint for the configured embedding
+// model. When vertex.embedding_endpoint is set (for example an EmbeddingGemma 2
+// deployment created in Vertex AI Model Garden) the request targets that
+// endpoint; otherwise it targets the Google publisher model.
+func (c *VertexAIClient) embeddingURL() string {
+	if c.embeddingEndpoint != "" {
+		if strings.HasPrefix(c.embeddingEndpoint, "projects/") {
+			return fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/%s:predict", c.region, c.embeddingEndpoint)
+		}
+		return fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/endpoints/%s:predict",
+			c.region, c.projectID, c.region, c.embeddingEndpoint)
+	}
+
+	return fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
+		c.region, c.projectID, c.region, c.embeddingModel)
+}
+
+// EmbedTexts converts texts into embedding vectors. By default it uses the
+// Google publisher model (gemini-embedding-001); set vertex.embedding_endpoint
+// to use a deployed model such as EmbeddingGemma 2. Requests are batched to
 // respect Vertex AI per-request instance limits.
 func (c *VertexAIClient) EmbedTexts(ctx context.Context, taskType string, texts []string) ([][]float64, error) {
 	if len(texts) == 0 {
@@ -206,8 +283,7 @@ func (c *VertexAIClient) EmbedTexts(ctx context.Context, taskType string, texts 
 		return nil, c.initErr
 	}
 
-	url := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
-		c.region, c.projectID, c.region, c.embeddingModel)
+	url := c.embeddingURL()
 
 	vectors := make([][]float64, 0, len(texts))
 	for start := 0; start < len(texts); start += c.embeddingBatch {
@@ -217,14 +293,21 @@ func (c *VertexAIClient) EmbedTexts(ctx context.Context, taskType string, texts 
 		}
 
 		batch := texts[start:end]
-		instances := make([]embeddingInstance, len(batch))
+		instances := make([]map[string]any, len(batch))
 		for i, text := range batch {
-			instances[i] = embeddingInstance{Content: text, TaskType: taskType}
+			instance := map[string]any{c.embeddingInstanceKey: text}
+			if c.embeddingSendTaskType && taskType != "" {
+				instance["task_type"] = taskType
+			}
+			instances[i] = instance
 		}
 
-		payload := embeddingPredictRequest{
-			Instances:  instances,
-			Parameters: embeddingParameters{OutputDimensionality: c.embeddingDim},
+		payload := embeddingPredictRequest{Instances: instances}
+		// outputDimensionality is a Google publisher-model parameter; deployed
+		// open-weights endpoints (e.g. EmbeddingGemma 2, fixed 768-d) do not
+		// always accept it, so only send it for publisher models.
+		if c.embeddingEndpoint == "" {
+			payload.Parameters = &embeddingParameters{OutputDimensionality: c.embeddingDim}
 		}
 
 		respBody, _, err := c.doRequest(ctx, http.MethodPost, url, payload)
@@ -242,10 +325,11 @@ func (c *VertexAIClient) EmbedTexts(ctx context.Context, taskType string, texts 
 		}
 
 		for _, prediction := range resp.Predictions {
-			if len(prediction.Embeddings.Values) == 0 {
-				return nil, fmt.Errorf("embedding kosong diterima dari model %s", c.embeddingModel)
+			values, err := parseEmbeddingValues(prediction)
+			if err != nil {
+				return nil, err
 			}
-			vectors = append(vectors, prediction.Embeddings.Values)
+			vectors = append(vectors, values)
 		}
 	}
 

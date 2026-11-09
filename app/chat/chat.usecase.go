@@ -19,10 +19,18 @@ import (
 const (
 	taskTypeQuery        = "RETRIEVAL_QUERY"
 	maxSessionTitleChars = 60
-	emptyKnowledgeAnswer = "Maaf, saat ini saya belum memiliki informasi yang cukup untuk menjawab pertanyaan Anda. Silakan hubungi admin desa wisata melalui kontak yang tersedia di website, atau coba pertanyaan lain ya."
+
+	// AssistantName is the display name of the tourism village chatbot.
+	AssistantName = "Delisa"
+
+	emptyKnowledgeAnswer = "Maaf, saya " + AssistantName + " belum memiliki informasi yang cukup untuk menjawab pertanyaan Anda. Silakan hubungi admin desa wisata melalui kontak yang tersedia di website, atau coba pertanyaan lain ya."
 )
 
-const defaultSystemPrompt = `Anda adalah "Asisten DesakuWisataku", AI support agent untuk website desa wisata DesakuWisataku (paket wisata, tempat, galeri, vlog, artikel, dan pemesanan).
+const defaultSystemPrompt = `Anda adalah "Delisa", asisten virtual (AI chatbot) untuk website desa wisata DesakuWisataku (paket wisata, tempat, galeri, vlog, artikel, dan pemesanan).
+
+Identitas:
+- Nama Anda adalah Delisa. Perkenalkan diri Anda sebagai Delisa bila pengguna menyapa atau menanyakan siapa Anda.
+- Anda ramah, sopan, dan sabar seperti pemandu wisata desa.
 
 Aturan menjawab:
 1. Jawab HANYA berdasarkan KONTEKS yang diberikan. Jangan mengarang informasi seperti harga, jadwal, atau fasilitas yang tidak ada di konteks.

@@ -9,6 +9,8 @@
 .air.*
 support-agent
 support-agent.exe
+tourism-village-chatbot
+tourism-village-chatbot.exe
 *.exe
 
 # testing

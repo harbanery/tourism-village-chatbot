@@ -1,8 +1,8 @@
-# Support Agent Golang — AI Chatbot Desa Wisata (RAG + Vertex AI)
+# Tourism Village Chatbot — AI Chatbot Desa Wisata (RAG + Vertex AI)
 
-Backend **AI support agent untuk desa wisata** (mendukung website [DesakuWisataku / tourism-village](https://github.com/)) yang dibangun dengan **Golang**, **Fiber**, **GORM**, dan **PostgreSQL**, dengan pipeline **RAG (Retrieval-Augmented Generation)** di atas **Google Vertex AI**:
+Backend **AI chatbot desa wisata bernama "Delisa"** (mendukung website [DesakuWisataku / tourism-village](https://github.com/)) yang dibangun dengan **Golang**, **Fiber**, **GORM**, dan **PostgreSQL**, dengan pipeline **RAG (Retrieval-Augmented Generation)** di atas **Google Vertex AI**:
 
-- **Embedding** dokumen & gambar via model embedding Vertex AI (default `gemini-embedding-001`, mendukung **EmbeddingGemma** — cukup ganti `vertex.embedding_model`).
+- **Embedding** dokumen & gambar via Vertex AI — Google publisher model (default `gemini-embedding-001`) **atau** open-weights model yang di-deploy di Model Garden seperti **EmbeddingGemma 2** (`vertex.embedding_endpoint`).
 - **Generation** jawaban via **Gemini** di Vertex AI (default `gemini-2.5-flash`), multimodal untuk deskripsi gambar.
 - **Knowledge base** PostgreSQL: impor teks, file dokumen (`.txt`, `.md`, `.csv`, `.json`, `.html`, `.pdf`), dan gambar (`.jpg`, `.png`, `.webp`).
 - Struktur project mengikuti pola **c-access** (`config/`, `app/<module>/`, `entity/`, `helper/`, `middleware/`, `route/`).
@@ -11,6 +11,7 @@ Backend **AI support agent untuk desa wisata** (mendukung website [DesakuWisatak
 
 | Fitur | Keterangan |
 | --- | --- |
+| Asisten "Delisa" | Persona chatbot ramah berpanduan wisata desa, dikonfigurasi lewat system prompt |
 | RAG chat | Pertanyaan di-embed → retrieval chunk ter relevan (cosine similarity) → jawaban digenerate Gemini dengan konteks + riwayat chat |
 | Impor dokumen | Upload file teks/PDF, otomatis di-chunk dan di-embed ke PostgreSQL |
 | Impor gambar | Gambar dideskripsikan Gemini (multimodal), lalu deskripsinya yang di-embed sehingga gambar bisa dicari |
@@ -24,7 +25,7 @@ Backend **AI support agent untuk desa wisata** (mendukung website [DesakuWisatak
 ```
                 ┌──────────────────────────── INGESTION ────────────────────────────┐
 teks / file  ──►│ chunking (paragraf→kalimat, ukuran + overlap)                     │
-dokumen/pdf     │ EmbeddingGemma / gemini-embedding (Vertex AI :predict)            │──► documents
+dokumen/pdf     │ gemini-embedding-001 / EmbeddingGemma 2 (Vertex AI :predict)      │──► documents
                 │                                                                    │    document_chunks (jsonb)
 gambar       ──►│ Gemini vision → deskripsi teks → embedding deskripsi              │        │
                 └────────────────────────────────────────────────────────────────────┘        │
@@ -32,12 +33,21 @@ gambar       ──►│ Gemini vision → deskripsi teks → embedding deskrip
                 ┌──────────────────────────── CHAT ────────────────────────────┐           │
 pertanyaan   ──►│ embedding pertanyaan (task_type RETRIEVAL_QUERY)             │           │
                 │ cosine similarity vs semua chunk → top-K (chat.top_k)        │◄──────────┘
-                │ prompt: system prompt + riwayat + KONTEKS + pertanyaan       │
+                │ prompt: system prompt (Delisa) + riwayat + KONTEKS + tanya   │
                 │ Gemini generateContent (Vertex AI) → jawaban + sources       │──► respons
                 └───────────────────────────────────────────────────────────────┘
 ```
 
 Embedding disimpan sebagai `jsonb` dan similarity dihitung di aplikasi, sehingga **tidak butuh extension pgvector** (bisa di-upgrade ke pgvector jika korpus membesar).
+
+### Pilihan model embedding
+
+| Mode | Konfigurasi | Catatan |
+| --- | --- | --- |
+| Google publisher model (default) | `vertex.embedding_model: "gemini-embedding-001"` | Paling cepat dipakai, mendukung `outputDimensionality` (MRL) & `task_type` |
+| Model Garden deployed (mis. EmbeddingGemma 2) | `vertex.embedding_endpoint: "<endpoint-id>"` | Deploy EmbeddingGemma 2 dulu di Vertex AI Model Garden, lalu tempel ID/nama resource endpoint |
+
+Saat `vertex.embedding_endpoint` diisi, request `:predict` diarahkan ke endpoint tersebut; blok `parameters.outputDimensionality` dan hint `task_type` otomatis tidak dikirim karena container open-weights memakai dimensi tetap (768-d).
 
 ## Teknologi
 
@@ -53,7 +63,7 @@ Embedding disimpan sebagai `jsonb` dan similarity dihitung di aplikasi, sehingga
 ## Struktur Project
 
 ```
-support-agent-golang/
+tourism-village-chatbot/
 ├── main.go                     # entrypoint & bootstrap (pola c-access)
 ├── config.json.example         # contoh konfigurasi
 ├── response_message.json       # master pesan respons (ID/EN)
@@ -94,7 +104,7 @@ support-agent-golang/
 ## Prasyarat
 
 1. **Go 1.26+** (toolchain lama akan otomatis ter-download via `GOTOOLCHAIN=auto`).
-2. **PostgreSQL** — jalankan cepat: `docker compose up -d` (membuat DB `support_agent`).
+2. **PostgreSQL** — jalankan cepat: `docker compose up -d` (membuat DB `tourism_village_chatbot`).
 3. **Google Cloud**:
    - Buat project & aktifkan **Vertex AI API** (`aiplatform.googleapis.com`).
    - Login lokal: `gcloud auth application-default login`, **atau** siapkan **service account JSON** (peran `Vertex AI User`) lalu isi `vertex.credentials_file`.
@@ -213,8 +223,11 @@ curl -X POST http://localhost:8080/api/knowledge/search \
 | `vertex.project_id` | — | Project ID GCP (**wajib diisi**) |
 | `vertex.region` | `asia-southeast2` | Region Vertex AI (Jakarta) |
 | `vertex.credentials_file` | `""` | Path service account JSON; kosong = ADC |
-| `vertex.embedding_model` | `gemini-embedding-001` | Model embedding; ganti ke `embeddinggemma-001` (EmbeddingGemma) atau `text-embedding-005` bila tersedia di project |
-| `vertex.embedding_dimension` | `768` | Dimensi output embedding (MRL) |
+| `vertex.embedding_model` | `gemini-embedding-001` | Google publisher model embedding |
+| `vertex.embedding_endpoint` | `""` | ID / nama resource endpoint Vertex AI hasil deploy Model Garden (mis. **EmbeddingGemma 2**). Kosong = pakai `embedding_model` |
+| `vertex.embedding_instance_key` | `content` | Nama field instance pada payload `:predict` (beberapa container memakai `text`) |
+| `vertex.embedding_send_task_type` | `true` (publisher) | Kirim hint `task_type`; default otomatis `false` untuk deployed endpoint |
+| `vertex.embedding_dimension` | `768` | Dimensi output embedding (MRL, hanya publisher model) |
 | `vertex.embedding_batch_size` | `5` | Jumlah teks per request predict |
 | `vertex.chat_model` | `gemini-2.5-flash` | Model Gemini untuk jawaban & deskripsi gambar |
 | `knowledge.chunk_size` | `1200` | Ukuran chunk (karakter) |
@@ -224,12 +237,14 @@ curl -X POST http://localhost:8080/api/knowledge/search \
 | `chat.min_score` | `0.3` | Ambang cosine similarity minimum |
 | `chat.max_history` | `10` | Jumlah pesan riwayat yang dikirim ke Gemini |
 | `chat.temperature` | `0.2` | Temperature generation |
-| `chat.system_prompt` | `""` | Override system prompt default (bahasa Indonesia, khusus desa wisata) |
+| `chat.system_prompt` | `""` | Override system prompt default (persona "Delisa", bahasa Indonesia, khusus desa wisata) |
 
 ## Catatan Teknis
 
-- **Model embedding seragam**: dokumen dan query harus di-embed dengan model + dimensi yang sama. Jika `vertex.embedding_model` diganti, hapus dan impor ulang semua dokumen agar vectornya konsisten.
-- **Task type**: ingestion memakai `RETRIEVAL_DOCUMENT`, pertanyaan memakai `RETRIEVAL_QUERY` sesuai rekomendasi Google untuk RAG.
+- **Identitas asisten**: nama asisten `Delisa` didefinisikan di `app/chat/chat.usecase.go` (`defaultSystemPrompt` + konstanta `AssistantName`). Ubah konstanta itu jika ingin mengganti nama persona tanpa menyentuh `chat.system_prompt`.
+- **Model embedding seragam**: dokumen dan query harus di-embed dengan model + dimensi yang sama. Jika `vertex.embedding_model` atau `vertex.embedding_endpoint` diganti, hapus dan impor ulang semua dokumen agar vectornya konsisten.
+- **EmbeddingGemma 2**: open-weights, jadi harus di-deploy dulu lewat Model Garden (`gcloud ai endpoints deploy-model` atau konsol Vertex AI); setelah itu tempel ID endpoint ke `vertex.embedding_endpoint`. Model ini memetakan teks, gambar, audio, dan video ke ruang vektor 768-d yang sama.
+- **Task type**: ingestion memakai `RETRIEVAL_DOCUMENT`, pertanyaan memakai `RETRIEVAL_QUERY` sesuai rekomendasi Google untuk RAG (otomatis dilewati pada deployed endpoint).
 - **Skala**: cosine similarity dihitung di aplikasi (korpus ribuan chunk masih cepat). Untuk korpus besar, migrasi kolom `embedding` ke `vector` pgvector + indeks HNSW.
 - **Struktur respons** (`code`/`message`/`data`) dan file `response_message.json` mengikuti pola c-access agar konsisten dengan service lain.
 
@@ -238,7 +253,7 @@ curl -X POST http://localhost:8080/api/knowledge/search \
 ```bash
 go build ./...   # ✅ compile
 go vet ./...     # ✅ static analysis
-go test ./...    # ✅ unit test (chunker & similarity)
+go test ./...    # ✅ unit test (chunker, similarity, parsing embedding Vertex AI)
 ```
 
 ## Lisensi
